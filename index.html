@@ -1,0 +1,821 @@
+<title>Star Battle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one-screen phone game. Header row, square board filling the width, control bar beneath. */
+:root {
+  color-scheme: dark;
+  --bg: #26272b;
+  --panel: #303136;
+  --fg: #ecebe6;
+  --muted: #9c9ca3;
+  --line: #1c1c1f;
+  --thin: rgba(28, 28, 31, .35);
+  --star: #ffffff;
+  --mark: #ffffff;
+  --bad: #ff5d5d;
+  --gold: #f2cf63;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  /* region colors, muted like a printed puzzle book */
+  --r0: #7f80cf; --r1: #8c6e5d; --r2: #8ea35b; --r3: #d8b75c; --r4: #d38c5d;
+  --r5: #c46c7c; --r6: #7d9de0; --r7: #919aa6; --r8: #8c5ec2; --r9: #5fa79a;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--display);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.app {
+  max-width: 560px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+h1 { margin: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -.01em; }
+h1 span { color: var(--gold); }
+.timer { font-family: var(--mono); font-size: 1rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* level bar: arrows either side of the level picker button */
+.levelbar { display: flex; gap: 8px; align-items: stretch; }
+.arrow, .pick {
+  font: inherit; color: var(--fg); background: var(--panel);
+  border: 0; border-radius: 10px; cursor: pointer;
+}
+.arrow { width: 48px; font-size: 1.2rem; }
+.arrow:disabled { opacity: .35; cursor: default; }
+.pick {
+  flex: 1; padding: 10px 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 1rem; font-weight: 500;
+}
+.pick small { font-size: .78rem; color: var(--muted); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.tag {
+  font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--bad); border: 1px solid currentColor; border-radius: 4px; padding: 1px 4px; margin-left: 6px;
+  vertical-align: 2px;
+}
+
+/* level list sheet */
+.sheet {
+  position: fixed; inset: 0; z-index: 10;
+  background: var(--bg);
+  overflow-y: auto;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: fade .2s ease both;
+}
+.sheet-inner { max-width: 560px; margin: 0 auto; padding-inline: 16px; padding-block: 14px 24px; display: flex; flex-direction: column; gap: 14px; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; position: sticky; top: 0; background: var(--bg); padding-block: 4px; z-index: 1; }
+.sheet-head h2 { margin: 0; font-size: 1.4rem; }
+.sheet-head p { margin: 2px 0 0; color: var(--muted); font-size: .85rem; }
+.close { font: inherit; font-size: 1rem; color: var(--fg); background: var(--panel); border: 0; border-radius: 10px; padding: 10px 16px; cursor: pointer; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.tile {
+  font: inherit; color: var(--fg); background: var(--panel);
+  border: 2px solid transparent; border-radius: 10px;
+  padding: 10px 4px 8px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  position: relative;
+}
+.tile b { font-size: 1.35rem; font-weight: 700; line-height: 1; }
+.tile small { font-family: var(--mono); font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tile.done small { color: var(--gold); }
+.tile.current { border-color: var(--gold); }
+.tile.hard::after {
+  content: ""; position: absolute; top: 7px; right: 7px;
+  width: 7px; height: 7px; border-radius: 50%; background: var(--bad);
+}
+.legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: .8rem; }
+.legend span::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.legend .l-hard::before { background: var(--bad); }
+.legend .l-done::before { background: var(--gold); }
+.legend .l-wip::before { background: var(--muted); }
+.arrow:focus-visible, .pick:focus-visible, .tile:focus-visible, .close:focus-visible, .btn:focus-visible, .cell:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+.board-wrap { position: relative; width: 100%; max-width: min(100%, 72vh); margin: 0 auto; }
+.board {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(10, 1fr);
+  border-radius: 4px;
+  overflow: hidden;
+  touch-action: none; /* finger drags mark cells instead of scrolling */
+}
+.cell {
+  position: relative;
+  border: 0; padding: 0; margin: 0;
+  background: var(--c);
+  cursor: pointer;
+  display: grid; place-items: center;
+}
+.cell svg { width: 62%; height: 62%; pointer-events: none; }
+.cell .x { width: 34%; height: 34%; }
+.cell .x { filter: drop-shadow(0 0 1px rgba(0,0,0,.45)); }
+.cell .x line { stroke: var(--mark); stroke-width: 1.6; stroke-linecap: round; }
+.cell .st path { fill: var(--star); stroke: rgba(0,0,0,.35); stroke-width: .8; stroke-linejoin: round; }
+.cell.bad .st path { fill: var(--bad); }
+.cell .pop { animation: pop .32s cubic-bezier(.3,1.6,.6,1) both; animation-delay: var(--d, 0ms); }
+.cell .st.pop { animation-duration: .36s; }
+@keyframes pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+.cell { transition: filter .2s; }
+.cell.dim { filter: brightness(.45) saturate(.6); }
+.cell.target::after {
+  content: ""; position: absolute; inset: 8%;
+  border: 3px solid var(--gold); border-radius: 50%;
+  animation: pulse 1.1s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes pulse { from { transform: scale(.85); opacity: .6; } to { transform: scale(1); opacity: 1; } }
+.grid-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.grid-lines .thin { stroke: var(--thin); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.grid-lines .thick { stroke: var(--line); stroke-width: 2; stroke-linecap: square; vector-effect: non-scaling-stroke; fill: none; }
+
+.status { min-height: 2.8em; text-align: center; color: var(--muted); font-size: .95rem; line-height: 1.4; text-wrap: balance; }
+.status b { color: var(--fg); font-weight: 500; }
+.status.hint { color: var(--fg); }
+.status.hint b { color: var(--gold); }
+.btn.hint { color: var(--gold); }
+
+.controls { display: flex; gap: 8px; }
+.btn {
+  flex: 1;
+  font: inherit; font-size: .95rem; font-weight: 500;
+  color: var(--fg);
+  background: var(--panel);
+  border: 0; border-radius: 10px;
+  padding: 12px 8px;
+  cursor: pointer;
+}
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.warn { background: #5a2f33; }
+.btn.primary { background: var(--gold); color: #26272b; }
+
+.win {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  background: rgba(20, 20, 23, .62);
+  border-radius: 4px;
+  animation: fade .4s ease both;
+}
+.win-card {
+  background: var(--bg);
+  border-radius: 14px;
+  padding: 22px 24px;
+  text-align: center;
+  display: flex; flex-direction: column; gap: 10px;
+  max-width: 80%;
+}
+.win-card h2 { margin: 0; font-size: 1.6rem; }
+.win-card p { margin: 0; color: var(--muted); font-family: var(--mono); font-size: .9rem; }
+@keyframes fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  /* keep the wave's timing, but fade instead of scaling */
+  .cell .pop { animation-name: appear; animation-timing-function: linear; }
+  .cell.target::after { animation: none; }
+  .win { animation: none; }
+}
+</style>
+
+<div class="app">
+  <header>
+    <h1>Star Battle <span>★</span></h1>
+    <div class="timer" id="timer">00:00</div>
+  </header>
+  <nav class="levelbar" aria-label="Levels">
+    <button class="arrow" id="prev" type="button" aria-label="Previous level">‹</button>
+    <button class="pick" id="pick" type="button" aria-haspopup="dialog"></button>
+    <button class="arrow" id="nextlvl" type="button" aria-label="Next level">›</button>
+  </nav>
+  <div class="board-wrap">
+    <div class="board" id="board" role="grid" aria-label="Puzzle board"></div>
+    <div class="win" id="win" hidden>
+      <div class="win-card">
+        <h2 id="win-title">Solved</h2>
+        <p id="win-time"></p>
+        <button class="btn primary" id="next" type="button">Next level</button>
+      </div>
+    </div>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="controls">
+    <button class="btn" id="undo" type="button">Undo</button>
+    <button class="btn hint" id="hint" type="button">Hint</button>
+    <button class="btn" id="clear" type="button">Clear board</button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <div>
+        <h2 id="sheet-title">Levels</h2>
+        <p id="sheet-count"></p>
+      </div>
+      <button class="close" id="close" type="button">Close</button>
+    </div>
+    <div class="legend"><span class="l-done">Best time</span><span class="l-wip">In progress</span><span class="l-hard">Harder</span></div>
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<script>
+// Each level: region map (one digit per cell, row by row). Generated by tools/generate.js
+// and verified to have exactly one solution and to be solvable step by step with the hints.
+// Rule: 1 star per row, column and region. `hard` marks the occasional tougher level.
+const LEVELS = [
+  { regions: ["0233333311","2223333111","2233333341","2333344444","2223747777","5553777777","5666677777","5677777777","5666667778","5999999888"] },
+  { hard: true, regions: ["2220000000","2226660011","2226666613","4422611113","4462615511","4662655511","6662666551","7662666551","7766668855","7766988888"] },
+  { hard: true, regions: ["0001111111","0011110001","2000000111","2220040331","2770044431","5578846433","5778846483","7777866483","7797888483","9999998888"] },
+  { regions: ["1000000000","1111102000","3310002200","3110447770","4444477470","6555444470","6685888477","6888898887","6898898988","8899999998"] },
+  { regions: ["0000000111","0000000011","0304204010","0334444000","0064464444","6064464455","6664466444","6666667444","6888887444","6899887774"] },
+  { regions: ["2222244400","3122224000","3323224404","3333322444","5552222464","9552254466","9955255464","8995257464","8955554444","8999555544"] },
+  { regions: ["0000000002","1000000002","1110442222","1100342422","5110144422","5511146222","5555666622","9665556777","9966656788","9996666668"] },
+  { regions: ["5555500000","5225220011","5322200441","5320204441","5220000041","5520550099","6520550079","8555557079","8885777779","8777777999"] },
+  { regions: ["3330077555","3222777155","3772755555","3777775466","3775555446","7755559946","7555599966","7759999999","9799988889","9999999988"] },
+  { hard: true, regions: ["2222200333","2222200031","2222243333","5255544333","5554446636","5444466336","5444446366","5444746666","8889777766","8999766666"] },
+  { regions: ["0000000111","4444001111","2444311111","4433336611","4444336551","4333336651","4333366657","4336667557","8833677757","8866679777"] },
+  { regions: ["1111000000","1221111100","4422103110","4452103330","4552200000","4555550000","4888855006","4748000006","4448086666","4498888886"] },
+  { regions: ["1110011122","1111114112","1444444222","1114444423","1144444423","4445554223","4745955563","4799995533","4788955535","4488999555"] },
+  { regions: ["0000122222","0111122222","0117726262","3117226662","3177224662","3375244466","7777447776","7777777666","9899779666","9999999996"] },
+  { regions: ["1111111101","4112444111","4412424113","4422224143","4444444444","5544477744","7777777666","7776677776","7786666666","7886669666"] },
+  { regions: ["1113300022","1113332024","3113222224","3333242224","3332244444","6633345544","6334445744","6334499794","6834449794","6888999994"] },
+  { hard: true, regions: ["2223333330","2333311000","2244331088","2444438888","2244968868","5249966668","2249966688","2779969998","2279999888","9999999999"] },
+  { regions: ["1666000000","1626666060","6626366660","6225336000","5555576640","5557777640","5777667660","5777766600","5555766608","5599766666"] },
+  { regions: ["4440000022","4411100222","4414400232","4444770233","9646670777","9646677757","9666977555","9889997777","9888899977","9999997777"] },
+  { regions: ["5500000000","2555001110","2255044100","2553341110","2255341410","2555644400","2555664444","2266664497","6668666697","8888886699"] },
+  { regions: ["0111111111","1141222261","1443332261","4443432661","9444435666","9949935666","9999999986","9997798886","9777999989","9799999999"] },
+  { regions: ["4444402222","4341100222","4300000222","4333322222","4444225222","4444275222","6444772222","6448777722","6488999992","6888888892"] },
+  { regions: ["5005111114","5205888114","5255583314","5555583814","5655888814","6655887888","6657887788","9657777788","9559997788","9999977888"] },
+  { hard: true, regions: ["0026333111","0026633111","2224633331","2224663555","2274663555","5577666565","5557556665","8857756565","8555555555","8888599555"] },
+  { regions: ["1111000222","1111100022","3114444222","3311144222","3331144422","3355111422","7333666422","7773634422","7883339444","7788899994"] },
+  { regions: ["7222000000","7222201404","7722200404","7333225444","7773335499","7753355449","7555555469","7557775559","7887755599","7777559999"] },
+  { regions: ["0000055444","1110005544","1111555224","1133555554","3339555554","3999585855","6989985857","6988888877","9989899897","9999999997"] },
+  { regions: ["1111122033","7173323333","7777322333","7733333333","7773444883","7733355583","6777777588","9997978558","9977998558","9999998888"] },
+  { regions: ["0111111111","0217151111","0217155511","0217153311","7217555446","7777588466","7978888668","7978778888","7977788888","7999988888"] },
+  { regions: ["0000001112","0111001212","0011111212","1113114222","1113444244","5554454447","5444456667","5445559667","5555889666","5559999999"] },
+  { hard: true, regions: ["0002211111","0202111444","0222444456","0022444356","0229494356","0999994556","0997796666","0977797667","8977797777","9997777777"] },
+  { regions: ["0000002221","0033322211","0033222221","0003322444","0773324445","7773994555","8733399669","8777799969","8887799969","8889999999"] },
+  { regions: ["6660022222","6135052222","6135555525","6633554525","6663444555","6663334455","6663334444","6668844777","6648447779","4444449999"] },
+  { regions: ["0000000001","0222330111","0200033331","0004433433","0700444433","0740444555","0744477665","0777777775","7797788885","7798888888"] },
+  { regions: ["1111002222","1333333332","3366632222","4366333522","4466338552","4663388852","4668888852","4667788552","4697788882","4499982222"] },
+  { regions: ["2333333303","2441113333","2243333443","2944434444","7994444444","7794555449","7794556649","7999958949","7779888999","9999999999"] },
+  { regions: ["0003333311","0400055331","0440253311","0640053111","0646651171","0666651977","0666699997","0066996977","8069996999","6666666999"] },
+  { hard: true, regions: ["2000011333","2000011133","2201111533","2466615553","2466555555","9966566555","9666666566","9967776556","9977886656","9999866666"] },
+  { regions: ["2000000000","2020404401","2220444111","8520004334","8550004444","8855444444","6855477777","6894479997","9899449997","9999999777"] },
+  { regions: ["5000000004","5055010044","5053311124","5055333424","5055633444","5555673334","5566673734","5556777744","8556677744","8556664449"] },
+  { regions: ["3222202214","3322202214","6333222944","6632299994","6335999444","6655994449","9669987449","9999987779","9988889799","9999999999"] },
+  { regions: ["4444444001","4444244411","4222224333","4262553333","4262552333","4462522223","6662522333","6682522373","6682227777","8889999777"] },
+  { regions: ["2100000000","2122222000","2227266666","3227266226","3327262246","5557222266","5577726668","5779777888","5579988898","5577999999"] },
+  { regions: ["0001111111","0200111141","2222554441","3255555441","2288544444","2888554774","2268854744","9998854744","9998855744","9999999944"] },
+  { hard: true, regions: ["0000011113","2200111113","2100011113","2111114133","2212644335","2222649335","6266699955","6669997999","6866889999","6888899999"] },
+  { regions: ["1111000000","4111010007","4241111177","4443317777","4343111117","4353166777","4333666778","4433447778","4434447978","4444447978"] },
+  { regions: ["1100111155","6111165555","6666665225","6553665225","6555555744","6655755747","9695777777","9995555778","9955998888","9999999988"] },
+  { regions: ["2222220003","2020000413","2000444443","2000400043","2000000443","2600050433","6666654443","6786664343","9788883333","9999988883"] },
+  { regions: ["0003312888","3333112228","3446622828","3346622828","4344662888","4444662858","4846666758","8844667778","8846666878","9888888888"] },
+  { hard: true, regions: ["2222222000","2221662220","2266666620","6663333222","4662223325","7662222225","7666262255","7676666668","7777698868","7799999888"] },
+];
+const N = 10, K = 1;
+const BLANK = 0, CROSS = 1, STAR = 2;
+const STORE = "starbattle.v3";
+
+const $ = id => document.getElementById(id);
+const boardEl = $("board");
+const XSVG = '<svg class="x" viewBox="0 0 10 10"><line x1="1.5" y1="1.5" x2="8.5" y2="8.5"/><line x1="8.5" y1="1.5" x2="1.5" y2="8.5"/></svg>';
+const STARSVG = '<svg class="st" viewBox="0 0 24 24"><path d="M12 1.8l2.9 6.6 7.2.7-5.4 4.8 1.6 7.1L12 17.3 5.7 21l1.6-7.1L1.9 9.1l7.2-.7z"/></svg>';
+
+let saved = load();
+let level = saved.level ?? 0;
+let reg, cells, undoStack = [], cellEls = [];
+let prevAuto = new Set(), prevStars = new Set();
+let lastPlaced = -1;
+let clearArmed = false, clearTimer = 0;
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(STORE)) || { levels: {} }; } catch { return { levels: {} }; }
+}
+function persist() {
+  saved.level = level;
+  try { localStorage.setItem(STORE, JSON.stringify(saved)); } catch {}
+}
+function lvlState(i = level) {
+  return saved.levels[i] ??= { cells: new Array(N * N).fill(BLANK), time: 0, solved: false, best: null };
+}
+
+// ---------- rules ----------
+const rc = i => [Math.floor(i / N), i % N];
+function units() {
+  const U = [];
+  for (let i = 0; i < N; i++) {
+    U.push(Array.from({ length: N }, (_, j) => i * N + j));
+    U.push(Array.from({ length: N }, (_, j) => j * N + i));
+  }
+  for (let g = 0; g < N; g++) U.push([...Array(N * N).keys()].filter(i => reg[i] === g));
+  return U;
+}
+let UNITS = [];
+let unitsOf = [];
+
+// Cells a star rules out: its 8 neighbours, plus the rest of any row/column/region that is full.
+// Map each ruled-out cell to the star it comes from (for the ripple animation).
+function computeAuto() {
+  const auto = new Map();
+  for (let i = 0; i < N * N; i++) {
+    if (cells[i] !== STAR) continue;
+    const [r, c] = rc(i);
+    for (let a = r - 1; a <= r + 1; a++) for (let b = c - 1; b <= c + 1; b++) {
+      if (a < 0 || b < 0 || a >= N || b >= N || (a === r && b === c)) continue;
+      const j = a * N + b;
+      if (!auto.has(j)) auto.set(j, i);
+    }
+  }
+  for (const u of UNITS) {
+    const stars = u.filter(i => cells[i] === STAR);
+    if (stars.length < K) continue;
+    const src = stars.includes(lastPlaced) ? lastPlaced : stars[0];
+    for (const j of u) if (cells[j] !== STAR && !auto.has(j)) auto.set(j, src);
+  }
+  return auto;
+}
+
+function conflicts() {
+  const bad = new Set();
+  for (let i = 0; i < N * N; i++) {
+    if (cells[i] !== STAR) continue;
+    const [r, c] = rc(i);
+    for (let a = r - 1; a <= r + 1; a++) for (let b = c - 1; b <= c + 1; b++) {
+      if (a < 0 || b < 0 || a >= N || b >= N || (a === r && b === c)) continue;
+      if (cells[a * N + b] === STAR) { bad.add(i); bad.add(a * N + b); }
+    }
+  }
+  for (const u of UNITS) {
+    const stars = u.filter(i => cells[i] === STAR);
+    if (stars.length > K) stars.forEach(i => bad.add(i));
+  }
+  return bad;
+}
+
+function isSolved(bad) {
+  if (bad.size) return false;
+  return UNITS.every(u => u.filter(i => cells[i] === STAR).length === K);
+}
+
+// ---------- board ----------
+function buildBoard() {
+  reg = LEVELS[level].regions.join("").split("").map(Number);
+  UNITS = units();
+  boardEl.innerHTML = "";
+  cellEls = [];
+  for (let i = 0; i < N * N; i++) {
+    const [r, c] = rc(i);
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = "cell";
+    el.style.setProperty("--c", `var(--r${reg[i]})`);
+    el.setAttribute("aria-label", `Row ${r + 1}, column ${c + 1}`);
+    el.addEventListener("click", () => { if (performance.now() - dragEndAt > 400) tap(i); });
+    boardEl.appendChild(el);
+    cellEls.push(el);
+  }
+  boardEl.appendChild(gridLines());
+}
+
+function gridLines() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("class", "grid-lines");
+  svg.setAttribute("viewBox", `0 0 ${N} ${N}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  let thin = "", thick = "";
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const g = reg[r * N + c];
+    if (c < N - 1) { const seg = `M${c + 1} ${r}V${r + 1}`; reg[r * N + c + 1] !== g ? thick += seg : thin += seg; }
+    if (r < N - 1) { const seg = `M${c} ${r + 1}H${c + 1}`; reg[(r + 1) * N + c] !== g ? thick += seg : thin += seg; }
+  }
+  thick += `M0 0H${N}V${N}H0Z`;
+  svg.innerHTML = `<path class="thin" d="${thin}"/><path class="thick" d="${thick}"/>`;
+  return svg;
+}
+
+function render(animate) {
+  const auto = computeAuto();
+  const bad = conflicts();
+  const placed = lastPlaced;
+  for (let i = 0; i < N * N; i++) {
+    const el = cellEls[i];
+    const s = cells[i];
+    const isAuto = s === BLANK && auto.has(i);
+    const kind = s === STAR ? "star" : s === CROSS ? "cross" : isAuto ? "auto" : "blank";
+    const wasKind = el.dataset.kind;
+    el.classList.toggle("auto", kind === "auto");
+    el.classList.toggle("bad", bad.has(i));
+    el.classList.toggle("dim", !!hint && !hint.focus.has(i));
+    el.classList.toggle("target", !!hint && hint.targets.has(i));
+    el.setAttribute("aria-label", `Row ${Math.floor(i / N) + 1}, column ${i % N + 1}: ${kind === "star" ? "star" : kind === "blank" ? "empty" : "crossed out"}`);
+    if (wasKind === kind) continue;
+    el.dataset.kind = kind;
+    const crossLike = k => k === "cross" || k === "auto";
+    if (kind === "star") el.innerHTML = STARSVG;
+    else if (crossLike(kind)) { if (!crossLike(wasKind)) el.innerHTML = XSVG; }
+    else el.innerHTML = "";
+    const child = el.firstElementChild;
+    if (!animate || !child || (crossLike(kind) && crossLike(wasKind))) continue;
+    // Wave: delay grows with straight-line distance from the star that ruled the cell out
+    let d = 0;
+    if (kind === "auto") {
+      const [r, c] = rc(i), [sr, sc] = rc(auto.get(i));
+      d = Math.round(Math.hypot(r - sr, c - sc) * 85);
+    }
+    child.style.setProperty("--d", `${d}ms`);
+    child.classList.add("pop");
+  }
+  const st = lvlState();
+  const solvedNow = isSolved(bad);
+  const stars = cells.filter(v => v === STAR).length;
+  $("status").classList.toggle("hint", !!hint);
+  $("status").innerHTML = hint ? hint.msg : bad.size
+    ? `<b style="color:var(--bad)">Stars clash.</b> Two stars touch, or share a row, column or area.`
+    : `<b>${stars}</b> of ${N * K} stars placed`;
+  if (solvedNow && !st.solved) {
+    st.solved = true;
+    st.best = st.best == null ? st.time : Math.min(st.best, st.time);
+    persist();
+    setTimeout(showWin, animate ? 450 : 0);
+  }
+  $("undo").disabled = !undoStack.length;
+  renderLevels();
+}
+
+function tap(i) {
+  if (lvlState().solved) return;
+  const auto = computeAuto();
+  const shown = cells[i] === BLANK && auto.has(i) ? CROSS : cells[i];
+  // blank -> cross -> star -> blank. An auto-crossed cell already shows a cross, so it goes to star.
+  const next = shown === BLANK ? CROSS : shown === CROSS ? STAR : BLANK;
+  if (next === cells[i]) return;
+  hint = null;
+  undoStack.push([[i, cells[i]]]);
+  cells[i] = next;
+  lastPlaced = next === STAR ? i : -1;
+  startTimer();
+  save();
+  render(true);
+}
+
+// ---------- drag to cross / clear ----------
+// Dragging from a blank cell crosses every cell you pass over; dragging from a crossed
+// cell clears crosses instead. Stars are never touched. A drag is one undo step.
+let drag = null, dragEndAt = 0;
+function cellAt(x, y) {
+  const b = boardEl.getBoundingClientRect();
+  const c = Math.floor((x - b.left) / b.width * N), r = Math.floor((y - b.top) / b.height * N);
+  return r >= 0 && c >= 0 && r < N && c < N ? r * N + c : -1;
+}
+function dragApply(i) {
+  if (i < 0 || drag.seen.has(i)) return;
+  drag.seen.add(i);
+  const want = drag.mode === "cross" ? CROSS : BLANK;
+  const autoNow = computeAuto();
+  if (cells[i] === STAR || cells[i] === want) return;
+  if (want === CROSS && autoNow.has(i)) return; // already shows a cross
+  drag.changes.push([i, cells[i]]);
+  cells[i] = want;
+}
+function dragTo(i) {
+  // fill in any cells skipped by a fast swipe
+  const [r0, c0] = rc(drag.last), [r1, c1] = rc(i);
+  const steps = Math.max(Math.abs(r1 - r0), Math.abs(c1 - c0));
+  for (let s = 1; s <= steps; s++)
+    dragApply(Math.round(r0 + (r1 - r0) * s / steps) * N + Math.round(c0 + (c1 - c0) * s / steps));
+  drag.last = i;
+}
+boardEl.addEventListener("pointerdown", e => {
+  if (lvlState().solved || (e.pointerType === "mouse" && e.button !== 0)) return;
+  const i = cellAt(e.clientX, e.clientY);
+  if (i < 0) return;
+  drag = { id: e.pointerId, start: i, last: i, moved: false, seen: new Set(), changes: [],
+           mode: cells[i] === CROSS ? "clear" : "cross" };
+});
+window.addEventListener("pointermove", e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const i = cellAt(e.clientX, e.clientY);
+  if (i < 0 || i === drag.last) return;
+  if (!drag.moved) { drag.moved = true; lastPlaced = -1; hint = null; dragApply(drag.start); }
+  dragTo(i);
+  render(true);
+});
+function endDrag(e) {
+  if (!drag || e.pointerId !== drag.id) return;
+  if (drag.moved) {
+    dragEndAt = performance.now();
+    if (drag.changes.length) { undoStack.push(drag.changes); startTimer(); save(); }
+    render(false);
+  }
+  drag = null;
+}
+window.addEventListener("pointerup", endDrag);
+window.addEventListener("pointercancel", endDrag);
+
+// ---------- hints ----------
+// Finds the next logical step from the current board. First tap points at where to look,
+// second tap shows the exact cell(s) and why.
+let hint = null, hintStep = null, SOLUTION = null;
+
+function solve() { // the puzzle's single solution, as a set of cell indexes
+  const col = new Array(N).fill(false), rg = new Array(N).fill(false), pick = [];
+  function rec(r) {
+    if (r === N) return true;
+    for (let c = 0; c < N; c++) {
+      const g = reg[r * N + c];
+      if (col[c] || rg[g] || (r && Math.abs(pick[r - 1] - c) <= 1)) continue;
+      col[c] = rg[g] = true; pick[r] = c;
+      if (rec(r + 1)) return true;
+      col[c] = rg[g] = false;
+    }
+    return false;
+  }
+  rec(0);
+  return new Set(pick.map((c, r) => r * N + c));
+}
+
+const unitName = u => u < 2 * N ? (u % 2 ? `column ${(u >> 1) + 1}` : `row ${(u >> 1) + 1}`) : "area";
+const theUnit = u => u < 2 * N ? unitName(u) : "highlighted area";
+function ruledOutBy(i) { // every cell a star at i rules out
+  const out = new Set();
+  const [r, c] = rc(i);
+  for (let a = r - 1; a <= r + 1; a++) for (let b = c - 1; b <= c + 1; b++)
+    if (a >= 0 && b >= 0 && a < N && b < N) out.add(a * N + b);
+  for (const u of UNITS) if (u.includes(i)) u.forEach(j => out.add(j));
+  out.delete(i);
+  return out;
+}
+function knowledge() { // 1 star, -1 crossed, 0 open
+  const auto = computeAuto();
+  return cells.map((v, i) => v === STAR ? 1 : v === CROSS || auto.has(i) ? -1 : 0);
+}
+// Fill in forced moves until stuck. Returns the index of a unit left without room, or -1.
+function propagate(g) {
+  for (let changed = true; changed;) {
+    changed = false;
+    for (let i = 0; i < N * N; i++) if (g[i] === 1)
+      for (const j of ruledOutBy(i)) {
+        if (g[j] === 1) { const u = UNITS.findIndex(un => un.includes(i) && un.includes(j)); return u >= 0 ? u : 2 * N + reg[i]; }
+        if (g[j] === 0) { g[j] = -1; changed = true; }
+      }
+    for (let u = 0; u < UNITS.length; u++) {
+      const stars = UNITS[u].filter(i => g[i] === 1).length, open = UNITS[u].filter(i => g[i] === 0);
+      if (stars === 0 && open.length === 0) return u;
+      if (stars === 0 && open.length === 1) { g[open[0]] = 1; changed = true; }
+    }
+  }
+  return -1;
+}
+// k neighbouring rows (or columns) and the areas that fit inside them / feed them
+function confinement(g, kMin, kMax) {
+  for (let k = kMin; k <= kMax; k++) for (const axis of [0, 1]) for (let s = 0; s + k <= N; s++) {
+    const line = i => axis ? i % N : Math.floor(i / N);
+    const band = new Set([...Array(N * N).keys()].filter(i => line(i) >= s && line(i) < s + k));
+    const live = i => g[i] !== -1;
+    const inside = [], touching = new Set();
+    for (let a = 0; a < N; a++) {
+      const cellsA = [...Array(N * N).keys()].filter(i => reg[i] === a && live(i));
+      if (cellsA.every(i => band.has(i))) inside.push(a);
+      if (cellsA.some(i => band.has(i))) touching.add(a);
+    }
+    const what = k === 1 ? `${axis ? "column" : "row"} ${s + 1}` : `${axis ? "columns" : "rows"} ${s + 1}–${s + k}`;
+    if (inside.length === k) {
+      const targets = [...band].filter(i => !inside.includes(reg[i]) && g[i] === 0);
+      if (targets.length) return {
+        look: band,
+        msg1: `Look at <b>${what}</b> and the areas that sit completely inside ${k === 1 ? "it" : "them"}.`,
+        focus: new Set([...band, ...[...Array(N * N).keys()].filter(i => inside.includes(reg[i]))]), targets,
+        msg2: `${k === 1 ? "One area fits" : `${k} areas fit`} entirely in <b>${what}</b>, so ${k === 1 ? "it takes" : "they take"} all of the star${k > 1 ? "s" : ""} there. <b>Cross out</b> the marked cells.`,
+      };
+    }
+    if (touching.size === k) {
+      const targets = [...Array(N * N).keys()].filter(i => touching.has(reg[i]) && !band.has(i) && g[i] === 0);
+      if (targets.length) return {
+        look: band,
+        msg1: `Which areas can give <b>${what}</b> ${k === 1 ? "its star" : "their stars"}?`,
+        focus: new Set([...band, ...[...Array(N * N).keys()].filter(i => touching.has(reg[i]))]), targets,
+        msg2: `Only ${k === 1 ? "one area reaches" : `${k} areas reach`} <b>${what}</b>, so ${k === 1 ? "its star" : "their stars"} must be there. <b>Cross out</b> the marked cells.`,
+      };
+    }
+  }
+  return null;
+}
+
+function findStep() {
+  // 1. mistakes first
+  const wrong = [...Array(N * N).keys()].filter(i => (cells[i] === STAR && !SOLUTION.has(i)) || (cells[i] === CROSS && SOLUTION.has(i)));
+  if (wrong.length) return {
+    look: new Set(wrong.flatMap(i => [...UNITS.filter(u => u.includes(i))[2]])),
+    msg1: `Something on the board is <b>wrong</b>. Check the highlighted area.`,
+    targets: wrong, focus: new Set(wrong),
+    msg2: `The marked ${wrong.length > 1 ? "cells are" : "cell is"} wrong. Undo or tap to change ${wrong.length > 1 ? "them" : "it"}.`,
+  };
+  const g = knowledge();
+  // 2. a row, column or area with one open cell left
+  for (let u = 0; u < UNITS.length; u++) {
+    const open = UNITS[u].filter(i => g[i] === 0);
+    if (open.length === 1 && !UNITS[u].some(i => g[i] === 1)) return {
+      look: new Set(UNITS[u]),
+      msg1: `Look closely at the <b>${theUnit(u)}</b>.`,
+      targets: open, focus: new Set(UNITS[u]),
+      msg2: `Only one cell is left in the ${theUnit(u)}. <b>Place a star</b> there.`,
+    };
+  }
+  // 3. rows/columns vs. areas: one line first, then bands of 2-4
+  const conf = confinement(g, 1, 1) || confinement(g, 2, 4);
+  if (conf) return conf;
+  // 4. a cell that would wipe out a whole row, column or area by itself (the user finds this
+  //    one the least natural, so it only comes after the counting steps)
+  for (let i = 0; i < N * N; i++) {
+    if (g[i] !== 0) continue;
+    const gone = ruledOutBy(i);
+    const u = UNITS.findIndex(un => !un.includes(i) && !un.some(j => g[j] === 1) && un.every(j => g[j] !== 0 || gone.has(j)));
+    if (u >= 0) return {
+      look: new Set(UNITS[u]),
+      msg1: `The <b>${theUnit(u)}</b> is running out of room. Is there a cell that would block all of it?`,
+      targets: [i], focus: new Set([...UNITS[u], i]),
+      msg2: `A star here would cross out every open cell in the ${theUnit(u)}. <b>Cross it out.</b>`,
+    };
+  }
+  // 5. a star that leads to a dead end after some forced moves
+  for (let i = 0; i < N * N; i++) {
+    if (g[i] !== 0) continue;
+    const h = g.slice(); h[i] = 1;
+    const u = propagate(h);
+    if (u >= 0) return {
+      look: new Set(UNITS[u]),
+      msg1: `Imagine where the star in the <b>${theUnit(u)}</b> could go, and what each choice forces.`,
+      targets: [i], focus: new Set([...UNITS[u], i]),
+      msg2: `A star here forces other stars that leave the ${theUnit(u)} with no room. <b>Cross it out.</b>`,
+    };
+  }
+  // fallback: reveal a star
+  const i = [...SOLUTION].find(j => cells[j] !== STAR);
+  return {
+    look: new Set(UNITS.filter(u => u.includes(i))[2]),
+    msg1: `This one needs a longer chain of reasoning. Focus on the <b>highlighted area</b>.`,
+    targets: [i], focus: new Set([i]),
+    msg2: `<b>Place a star</b> here.`,
+  };
+}
+
+$("hint").addEventListener("click", () => {
+  const st = lvlState();
+  if (st.solved || (hint && !hintStep)) return; // full hint already showing
+  if (!hint) {
+    hintStep = findStep();
+    hint = { focus: hintStep.look, targets: new Set(), msg: hintStep.msg1 };
+    st.hints = (st.hints || 0) + 1;
+    persist();
+  } else {
+    hint = { focus: new Set([...hintStep.look, ...hintStep.focus]), targets: new Set(hintStep.targets), msg: hintStep.msg2 };
+    hintStep = null;
+  }
+  render(false);
+});
+
+function save() {
+  lvlState().cells = cells.slice();
+  persist();
+}
+
+// ---------- timer ----------
+let tick = 0, tickStart = 0, baseTime = 0;
+function fmt(s) { const m = Math.floor(s / 60); return `${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
+function startTimer() {
+  if (tick || lvlState().solved) return;
+  baseTime = lvlState().time; tickStart = Date.now();
+  tick = setInterval(() => {
+    lvlState().time = baseTime + Math.floor((Date.now() - tickStart) / 1000);
+    $("timer").textContent = fmt(lvlState().time);
+    persist();
+  }, 1000);
+}
+function stopTimer() { clearInterval(tick); tick = 0; }
+document.addEventListener("visibilitychange", () => { if (document.hidden) stopTimer(); });
+
+// ---------- levels ----------
+const started = st => !!st && !st.solved && (st.time > 0 || st.cells.some(v => v !== BLANK));
+function renderLevels() {
+  const solvedCount = LEVELS.filter((_, i) => saved.levels[i]?.best != null).length;
+  const st = saved.levels[level];
+  $("pick").innerHTML = `<span>Level ${level + 1}${LEVELS[level].hard ? '<span class="tag">Hard</span>' : ""}</span>`
+    + `<small>${st?.best != null ? `★ ${fmt(st.best)}` : `${solvedCount}/${LEVELS.length} ▾`}</small>`;
+  $("prev").disabled = level === 0;
+  $("nextlvl").disabled = level === LEVELS.length - 1;
+}
+
+function openSheet() {
+  const grid = $("grid");
+  const solvedCount = LEVELS.filter((_, i) => saved.levels[i]?.best != null).length;
+  $("sheet-count").textContent = `${solvedCount} of ${LEVELS.length} solved`;
+  grid.innerHTML = "";
+  LEVELS.forEach((L, i) => {
+    const st = saved.levels[i];
+    const t = document.createElement("button");
+    t.type = "button";
+    t.className = "tile" + (L.hard ? " hard" : "") + (st?.best != null ? " done" : "") + (i === level ? " current" : "");
+    const info = st?.best != null ? `★ ${fmt(st.best)}` : started(st) ? `${fmt(st.time)} …` : "—";
+    t.innerHTML = `<b>${i + 1}</b><small>${info}</small>`;
+    t.setAttribute("aria-label", `Level ${i + 1}${L.hard ? ", harder" : ""}: ${st?.best != null ? `best time ${fmt(st.best)}` : started(st) ? "in progress" : "not played"}`);
+    t.addEventListener("click", () => { closeSheet(); openLevel(i); });
+    grid.appendChild(t);
+  });
+  $("sheet").hidden = false;
+  grid.children[level]?.scrollIntoView({ block: "center" });
+  grid.children[level]?.focus({ preventScroll: true });
+}
+function closeSheet() { $("sheet").hidden = true; }
+$("pick").addEventListener("click", openSheet);
+$("close").addEventListener("click", () => { closeSheet(); $("pick").focus(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
+$("prev").addEventListener("click", () => level > 0 && openLevel(level - 1));
+$("nextlvl").addEventListener("click", () => level < LEVELS.length - 1 && openLevel(level + 1));
+
+function openLevel(i) {
+  stopTimer();
+  level = i;
+  undoStack = []; lastPlaced = -1; hint = null; hintStep = null;
+  disarmClear();
+  buildBoard();
+  SOLUTION = solve();
+  const st = lvlState();
+  cells = st.cells.slice();
+  $("timer").textContent = fmt(st.time);
+  $("win").hidden = !st.solved;
+  if (st.solved) $("win-time").textContent = `Best time ${fmt(st.best)}`;
+  updateNextBtn();
+  persist();
+  render(false);
+}
+
+function showWin() {
+  stopTimer();
+  const st = lvlState();
+  const h = st.hints || 0;
+  $("win-time").textContent = `Time ${fmt(st.time)} · best ${fmt(st.best)}` + (h ? ` · ${h} hint${h > 1 ? "s" : ""}` : "");
+  updateNextBtn();
+  $("win").hidden = false;
+}
+function updateNextBtn() {
+  const last = level === LEVELS.length - 1;
+  $("next").textContent = last ? "Play again" : "Next level";
+}
+
+$("next").addEventListener("click", () => {
+  if (level < LEVELS.length - 1) openLevel(level + 1);
+  else resetLevel();
+});
+
+$("undo").addEventListener("click", () => {
+  const u = undoStack.pop();
+  if (!u) return;
+  for (let k = u.length - 1; k >= 0; k--) cells[u[k][0]] = u[k][1];
+  hint = null;
+  lastPlaced = -1;
+  save();
+  render(true);
+});
+
+function disarmClear() {
+  clearArmed = false; clearTimeout(clearTimer);
+  $("clear").textContent = "Clear board"; $("clear").classList.remove("warn");
+}
+$("clear").addEventListener("click", () => {
+  if (!clearArmed) {
+    clearArmed = true;
+    $("clear").textContent = "Tap again to clear"; $("clear").classList.add("warn");
+    clearTimer = setTimeout(disarmClear, 2500);
+    return;
+  }
+  disarmClear();
+  resetLevel();
+});
+
+function resetLevel() {
+  stopTimer();
+  const best = lvlState().best;
+  saved.levels[level] = { cells: new Array(N * N).fill(BLANK), time: 0, solved: false, best };
+  persist();
+  openLevel(level);
+}
+
+openLevel(Math.min(level, LEVELS.length - 1));
+</script>
