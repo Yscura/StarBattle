@@ -136,10 +136,11 @@ h1 span { color: var(--gold); }
   cursor: pointer;
   display: grid; place-items: center;
 }
-.cell svg { width: 62%; height: 62%; pointer-events: none; }
-.cell .x { width: 34%; height: 34%; }
-.cell .x { filter: drop-shadow(0 0 1px rgba(0,0,0,.45)); }
-.cell .x line { stroke: var(--mark); stroke-width: 1.6; stroke-linecap: round; }
+.cell svg { width: 70%; height: 70%; pointer-events: none; }
+/* crosses stay light and thin so stars read as the solid, important marks */
+.cell .x { width: 30%; height: 30%; filter: drop-shadow(0 0 1px rgba(0,0,0,.4)); }
+.cell .x line { stroke: var(--mark); stroke-opacity: .8; stroke-width: 1.1; stroke-linecap: round; }
+.cell .st { filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.45)); }
 .cell .st path { fill: var(--star); stroke: rgba(0,0,0,.35); stroke-width: .8; stroke-linejoin: round; }
 .cell.bad .st path { fill: var(--bad); }
 .cell .pop { animation: pop .32s cubic-bezier(.3,1.6,.6,1) both; animation-delay: var(--d, 0ms); }
