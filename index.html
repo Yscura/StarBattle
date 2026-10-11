@@ -916,6 +916,14 @@ $("hint").addEventListener("click", () => {
   render(false);
 });
 
+// Tapping anywhere outside the board (and the Hint button) hides the hint, so you can
+// scan the board again and see whether you'd have spotted the move yourself.
+document.addEventListener("pointerdown", e => {
+  if (!hint || boardEl.contains(e.target) || $("hint").contains(e.target)) return;
+  hint = null; hintStep = null;
+  render(false);
+});
+
 function save() {
   lvlState().cells = cells.slice();
   persist();
