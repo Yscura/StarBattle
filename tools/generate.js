@@ -1,8 +1,8 @@
-// Star Battle puzzle generator (10x10, K stars per row/column/region; K = 1 or 2).
-// Usage: node tools/generate.js [count] [seed] [stars] [hardenIterations] [targetScore]
+// Star Battle puzzle generator (NxN, K stars per row/column/region; K = 1 or 2).
+// Usage: node tools/generate.js [count] [seed] [stars] [hardenIterations] [targetScore] [size=10]
 // Prints JSON puzzles with a unique solution plus a difficulty rating.
 
-const N = 10;
+const N = +process.argv[7] || 10;
 const count = +process.argv[2] || 30;
 let seed = +process.argv[3] || Date.now() % 1e9;
 const K = +process.argv[4] || 1;
