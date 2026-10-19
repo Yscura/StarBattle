@@ -7,7 +7,12 @@
 const fs = require("fs"), vm = require("vm");
 const [,, gameFile, outFile, tier, minS, maxS, countS, ...files] = process.argv;
 const MIN = +minS, MAX = +maxS, COUNT = +countS;
-const cands = files.flatMap(f => JSON.parse(fs.readFileSync(f, "utf8")))
+// Candidate files are either a JSON array or one JSON puzzle per line (generate.js --ndjson)
+const readCands = f => {
+  const t = fs.readFileSync(f, "utf8").trim();
+  return t.startsWith("[") ? JSON.parse(t) : t.split(/\r?\n/).filter(Boolean).map(l => JSON.parse(l));
+};
+const cands = files.flatMap(readCands)
   .filter(c => c.score >= MIN && c.score <= MAX);
 
 const el = () => { const e = { classList: { toggle(){}, add(){}, remove(){} }, style: { setProperty(){} }, dataset: {}, children: [],
@@ -21,7 +26,7 @@ const ctx = { document: { getElementById: id => els[id] ??= el(), createElement:
 const test = `
 const fixed = LEVELS.length;
 LEVELS.forEach(L => EXISTING.push(L.regions.join()));
-for (const c of CANDS) LEVELS.push({ tier: "medium", regions: c.regions });
+for (const c of CANDS) LEVELS.push({ tier: "medium", regions: c.regions, id: puzzleId(c.regions) });
 for (let L = fixed; L < LEVELS.length; L++) {
   openLevel(L);
   const m = { cover: 0, chain: 0, fall: 0, steps: 0 };
@@ -29,7 +34,7 @@ for (let L = fixed; L < LEVELS.length; L++) {
     const s = findStep(); m.steps++;
     if (s.msg1.startsWith("This one")) m.fall++;
     else if (s.msg2.includes("would cross out every")) m.cover++;
-    else if (s.msg2.includes("forces other")) m.chain++;
+    else if (s.ghosts) m.chain++;
     const star = s.msg2.includes("Place a star");
     for (const i of s.targets) cells[i] = star ? STAR : CROSS;
     lastPlaced = -1; render(false);
@@ -39,11 +44,13 @@ for (let L = fixed; L < LEVELS.length; L++) {
 vm.runInNewContext(fs.readFileSync(gameFile, "utf8") + test, ctx);
 
 const seen = new Set(ctx.EXISTING);
-const good = ctx.RESULTS.filter(r => r.ok && !r.fall && r.chain <= 1 && !seen.has(r.regions.join()) && seen.add(r.regions.join()));
+// MAX_CHAIN (env, default 1): how many "forced chain" hints a level may need
+const MAX_CHAIN = +(process.env.MAX_CHAIN ?? 1);
+const good = ctx.RESULTS.filter(r => r.ok && !r.fall && r.chain <= MAX_CHAIN && !seen.has(r.regions.join()) && seen.add(r.regions.join()));
 // Keep the cleanest candidates (fewest "running out of room" steps), then spread the picks
 // evenly over the score range so the tier ramps up smoothly.
 good.sort((a, b) => a.cover - b.cover);
-const coverCap = good.length ? good[Math.min(good.length, COUNT * 2) - 1].cover : 0;
+const coverCap = good.length ? good[Math.min(good.length, Math.ceil(COUNT * 1.3)) - 1].cover : 0;
 const pool = good.filter(r => r.cover <= coverCap).sort((a, b) => a.score - b.score);
 const picked = pool.length <= COUNT ? pool
   : Array.from({ length: COUNT }, (_, k) => pool[Math.round(k * (pool.length - 1) / (COUNT - 1))]);

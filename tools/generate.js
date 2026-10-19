@@ -1,8 +1,11 @@
+const fs = require("fs");
 // Star Battle puzzle generator (NxN, K stars per row/column/region; K = 1 or 2).
-// Usage: node tools/generate.js [count] [seed] [stars] [hardenIterations] [targetScore] [size=10]
+// Usage: node tools/generate.js [count] [seed] [stars] [hardenIterations] [targetScore] [size=10] [--ndjson]
+// With --ndjson each puzzle is written as one JSON line as soon as it is made, so a long run can be stopped any time.
 // Prints JSON puzzles with a unique solution plus a difficulty rating.
 
 const N = +process.argv[7] || 10;
+const NDJSON = process.argv.includes("--ndjson");
 const count = +process.argv[2] || 30;
 let seed = +process.argv[3] || Date.now() % 1e9;
 const K = +process.argv[4] || 1;
@@ -301,9 +304,13 @@ while (out.length < count && tries < count * 50) {
   if (!r || r.stuck) continue;
   if (HARDEN && (!TARGET || Math.abs(scoreOf(r) - TARGET) > 2)) r = harden(reg, sol, HARDEN);
   const score = scoreOf(r);
-  out.push({ score, conf: r.conf, look: r.look, deepLook: r.deepLook, regions: reg.map(row => row.join('')), solution: sol });
+  const puzzle = { score, conf: r.conf, look: r.look, deepLook: r.deepLook, regions: reg.map(row => row.join('')), solution: sol };
+  out.push(puzzle);
+  if (NDJSON) fs.appendFileSync(1, JSON.stringify(puzzle) + "\n");
   process.stderr.write(`#${out.length} score=${score} conf=${r.conf} look=${r.look} deep=${r.deepLook}
 `);
 }
-out.sort((a, b) => a.score - b.score);
-console.log(JSON.stringify(out, null, 1));
+if (!NDJSON) {
+  out.sort((a, b) => a.score - b.score);
+  console.log(JSON.stringify(out, null, 1));
+}
