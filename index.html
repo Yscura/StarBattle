@@ -102,6 +102,13 @@ h1 span { color: var(--gold); }
 .sheet-head h2 { margin: 0; font-size: 1.4rem; }
 .sheet-head p { margin: 2px 0 0; color: var(--muted); font-size: .85rem; }
 .close { font: inherit; font-size: 1rem; color: var(--fg); background: var(--panel); border: 0; border-radius: 10px; padding: 10px 16px; cursor: pointer; }
+.toggle {
+  align-self: flex-start;
+  font: inherit; font-size: .85rem; color: var(--muted); background: var(--panel);
+  border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer;
+}
+.toggle[aria-pressed="true"] { color: var(--fg); }
+.toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
 .tile {
   font: inherit; color: var(--fg); background: var(--panel);
@@ -276,6 +283,7 @@ h1 span { color: var(--gold); }
       <button class="close" id="close" type="button">Close</button>
     </div>
     <div class="legend"><span class="easy">Easy</span><span class="medium">Medium</span><span class="hard">Hard</span><span class="l-done">Best time</span><span class="l-wip">In progress</span></div>
+    <button class="toggle" id="vibe" type="button" aria-pressed="true">Vibration: On</button>
     <div id="grid"></div>
   </div>
 </div>
@@ -1329,6 +1337,16 @@ function load() {
   return data;
 }
 const stateOf = i => saved.levels[LEVELS[i].id];
+// Vibration feedback (Android browsers; does nothing where unsupported, e.g. iPhone)
+function buzz(pattern) {
+  if (saved.vibrate === false) return;
+  try { navigator.vibrate?.(pattern); } catch {}
+}
+function renderVibe() {
+  const on = saved.vibrate !== false;
+  $("vibe").setAttribute("aria-pressed", on);
+  $("vibe").textContent = `Vibration: ${on ? "On" : "Off"}`;
+}
 function persist() {
   saved.current = LEVELS[level].id;
   try { localStorage.setItem(STORE, JSON.stringify(saved)); } catch {}
@@ -1501,6 +1519,7 @@ function celebrate(origin) {
     el.classList.add("flash");
   });
   setTimeout(() => cellEls.forEach(el => el.classList.remove("flash")), longest + FLASH + 100);
+  buzz([30, 70, 30, 70, 30, 70, 160]);
   return longest + FLASH + 250;
 }
 
@@ -1515,6 +1534,7 @@ function tap(i) {
   undoStack.push([[i, cells[i]]]);
   cells[i] = next;
   lastPlaced = next === STAR ? i : -1;
+  buzz(next === STAR ? (conflicts().has(i) ? [25, 60, 25] : 22) : next === CROSS ? 10 : 6);
   startTimer();
   save();
   render(true);
@@ -1538,6 +1558,7 @@ function dragApply(i) {
   if (want === CROSS && autoNow.has(i)) return; // already shows a cross
   drag.changes.push([i, cells[i]]);
   cells[i] = want;
+  buzz(want === CROSS ? 7 : 5);
 }
 function dragTo(i) {
   // fill in any cells skipped by a fast swipe
@@ -1835,6 +1856,7 @@ function renderLevels() {
 }
 
 function openSheet() {
+  renderVibe();
   const grid = $("grid");
   const solvedCount = LEVELS.filter((_, i) => stateOf(i)?.best != null).length;
   $("sheet-count").textContent = `${solvedCount} of ${LEVELS.length} solved`;
@@ -1867,6 +1889,12 @@ function openSheet() {
 }
 function closeSheet() { $("sheet").hidden = true; }
 $("pick").addEventListener("click", openSheet);
+$("vibe").addEventListener("click", () => {
+  saved.vibrate = saved.vibrate === false;
+  persist();
+  renderVibe();
+  buzz(20); // a sample buzz when it's switched on
+});
 $("close").addEventListener("click", () => { closeSheet(); $("pick").focus(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
 $("prev").addEventListener("click", () => level > 0 && openLevel(level - 1));
