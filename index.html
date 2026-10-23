@@ -1523,18 +1523,23 @@ function celebrate(origin) {
   return longest + FLASH + 250;
 }
 
+// blank -> cross -> star -> blank. An auto-crossed cell already shows a cross, so it goes to star.
+function nextState(i) {
+  const shown = cells[i] === BLANK && computeAuto().has(i) ? CROSS : cells[i];
+  return shown === BLANK ? CROSS : shown === CROSS ? STAR : BLANK;
+}
+const TICK = { [STAR]: 22, [CROSS]: 10, [BLANK]: 6 }; // vibration length (ms) per result
+
 function tap(i) {
   if (lvlState().solved) return;
-  const auto = computeAuto();
-  const shown = cells[i] === BLANK && auto.has(i) ? CROSS : cells[i];
-  // blank -> cross -> star -> blank. An auto-crossed cell already shows a cross, so it goes to star.
-  const next = shown === BLANK ? CROSS : shown === CROSS ? STAR : BLANK;
+  const next = nextState(i);
   if (next === cells[i]) return;
   hint = null;
   undoStack.push([[i, cells[i]]]);
   cells[i] = next;
   lastPlaced = next === STAR ? i : -1;
-  buzz(next === STAR ? (conflicts().has(i) ? [25, 60, 25] : 22) : next === CROSS ? 10 : 6);
+  // the touch tick already played on finger down; only a clash gets an extra buzz
+  if (next === STAR && conflicts().has(i)) buzz([25, 60, 25]);
   startTimer();
   save();
   render(true);
@@ -1558,7 +1563,6 @@ function dragApply(i) {
   if (want === CROSS && autoNow.has(i)) return; // already shows a cross
   drag.changes.push([i, cells[i]]);
   cells[i] = want;
-  buzz(want === CROSS ? 7 : 5);
 }
 function dragTo(i) {
   // fill in any cells skipped by a fast swipe
@@ -1574,6 +1578,7 @@ boardEl.addEventListener("pointerdown", e => {
   if (i < 0) return;
   drag = { id: e.pointerId, start: i, last: i, moved: false, seen: new Set(), changes: [],
            mode: cells[i] === CROSS ? "clear" : "cross" };
+  buzz(TICK[nextState(i)]); // feedback the moment the finger lands, matching what a tap will do
 });
 window.addEventListener("pointermove", e => {
   if (!drag || e.pointerId !== drag.id) return;
@@ -1581,6 +1586,7 @@ window.addEventListener("pointermove", e => {
   if (i < 0 || i === drag.last) return;
   if (!drag.moved) { drag.moved = true; lastPlaced = -1; hint = null; dragApply(drag.start); }
   dragTo(i);
+  buzz(drag.mode === "cross" ? TICK[CROSS] : TICK[BLANK]); // one tick per new cell entered
   render(true);
 });
 function endDrag(e) {
